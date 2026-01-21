@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field, ValidationError
 # 1. THE CONTRACT: Defining the Industrial Schema
 # This ensures that no "poisoned" data enters our system.
 class TelemetryData(BaseModel):
-    device_id: str = Field(..., example="S7-1200-NODE-01")
+    #device_id: str = Field(..., example="S7-1200-NODE-01")
+    device_id: str = Field(..., json_schema_extra={"example": "S7-1200-NODE-01"})
     temperature: float = Field(..., ge=-10.0, le=120.0)  # Celsius limits
     pressure: float = Field(..., ge=0.0, le=15.0)       # Bar limits
     status: str
