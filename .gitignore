@@ -1,0 +1,41 @@
+# Python - Archivos de ejecución y caché
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Entornos Virtuales (Fundamentales para proteger tu sistema)
+.venv/
+venv/
+ENV/
+
+# IDEs y Editores (Configuraciones locales tuyas)
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema Operativo
+.DS_Store
+Thumbs.db
+
+# Variables de entorno (Seguridad industrial)
+.env
+.venv
