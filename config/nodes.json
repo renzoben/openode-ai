@@ -1,0 +1,27 @@
+{
+  "system_metadata": {
+    "location": "Laboratorio Coronel Oviedo",
+    "version": "2.0.0-modular"
+  },
+  "modules": [
+    {
+      "id": "S7-1200-PROCESO",
+      "type": "PLC",
+      "active": true,
+      "driver": "s7_driver"
+    },
+    {
+      "id": "IOLINK-MONEO-01",
+      "type": "SMART_SENSORS",
+      "active": true,
+      "driver": "iolink_driver"
+    },
+    {
+      "id": "INTELITEK-CYBER-SEC",
+      "type": "SECURITY_GATEWAY",
+      "active": true,
+      "driver": "security_driver",
+      "notes": "Activar solo con el kit de Ciberseguridad Intelitek"
+    }
+  ]
+}

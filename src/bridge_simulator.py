@@ -1,93 +1,92 @@
 import asyncio
 import random
 import sqlite3
+import os
 from datetime import datetime
-from pydantic import BaseModel, Field, ValidationError
+from core.orchestrator import SystemOrchestrator
 
-# Configuración del Sistema
-FAILURE_PROBABILITY = 0.15 
-CRITICAL_THRESHOLD = 3
+# 1. CONFIGURACIÓN DE RUTAS ABSOLUTAS (Para evitar archivos "fantasma")
+# Detecta la carpeta 'src', luego sube un nivel a la raíz 'openode-ai'
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(CURRENT_DIR)
+DB_PATH = os.path.join(BASE_DIR, "openode.db")
+CONFIG_PATH = os.path.join(BASE_DIR, "config", "nodes.json")
 
-def init_db():
-    conn = sqlite3.connect('openode.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS telemetry (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            device_id TEXT,
-            temperature REAL,
-            pressure REAL,
-            status TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
+print(f"🔍 DIAGNÓSTICO DE RUTA:")
+print(f"   > Buscando DB en: {DB_PATH}")
+print(f"   > Buscando Config en: {CONFIG_PATH}\n")
 
-def save_to_db(node_id, temp, press, status):
-    """Función unificada para guardar datos válidos y críticos."""
+def get_db_connection():
+    return sqlite3.connect(DB_PATH)
+
+# 2. FUNCIÓN DE INFRAESTRUCTURA (Fuerza la creación de la tabla)
+def asegurar_tabla():
     try:
-        conn = sqlite3.connect('openode.db')
+        conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO telemetry (timestamp, device_id, temperature, pressure, status)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (datetime.utcnow().isoformat(), node_id, temp, press, status))
+            CREATE TABLE IF NOT EXISTS telemetry (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id TEXT NOT NULL,
+                value REAL NOT NULL,
+                status TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            )
+        ''')
         conn.commit()
         conn.close()
+        print("✅ INFRAESTRUCTURA: Tabla 'telemetry' verificada/creada con éxito.")
     except Exception as e:
-        print(f"Error en DB: {e}")
+        print(f"❌ ERROR CRÍTICO AL CREAR TABLA: {e}")
+        exit(1) # Si no podemos crear la tabla, no tiene sentido seguir
 
-class TelemetryData(BaseModel):
-    device_id: str
-    temperature: float = Field(..., ge=-10.0, le=120.0)
-    pressure: float = Field(..., ge=0.0, le=15.0)
-    status: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-def get_sensor_readings():
-    temp = round(random.uniform(20.0, 25.0), 2)
-    press = round(random.uniform(2.0, 3.5), 2)
-    if random.random() < FAILURE_PROBABILITY:
-        temp = 999.9  
-    return temp, press
-
-async def plc_node_simulator(node_id: str):
-    print(f"[*] Starting node: {node_id}")
-    consecutive_failures = 0 
+async def simulate_device(node):
+    node_id = node['id']
+    node_type = node['type']
     
     while True:
-        raw_temp, raw_press = get_sensor_readings()
+        value = round(random.uniform(20.0, 80.0), 2)
+        status = "OPERATIONAL"
+        if random.random() < 0.05:
+            status = "CRITICAL"
         
         try:
-            # Validación con Pydantic
-            reading = TelemetryData(
-                device_id=node_id, temperature=raw_temp, 
-                pressure=raw_press, status="OPERATIONAL"
-            )
-            consecutive_failures = 0
-            save_to_db(node_id, reading.temperature, reading.pressure, "OPERATIONAL")
-            print(f"[VALID] {node_id} | Temp: {reading.temperature}°C | Data saved to DB.")
-            
-        except ValidationError:
-            consecutive_failures += 1
-            print(f"\033[91m[ALERT]\033[0m {node_id} | Failure {consecutive_failures}/{CRITICAL_THRESHOLD} | Temp: {raw_temp}")
-            
-            if consecutive_failures >= CRITICAL_THRESHOLD:
-                print(f"\033[41m[CRITICAL SYSTEM FAILURE]\033[0m {node_id} NEEDS MAINTENANCE.")
-                # Registramos el estado crítico en la DB en lugar de un archivo log
-                save_to_db(node_id, raw_temp, raw_press, "CRITICAL")
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO telemetry (device_id, value, status, timestamp)
+                VALUES (?, ?, ?, ?)
+            ''', (node_id, value, status, datetime.now().isoformat()))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"❌ Error de persistencia en {node_id}: {e}")
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
 
 async def main():
-    nodes = ["S7-1200-LAB-01", "S7-1200-LAB-02", "ARDUINO-EDGE-01"]
-    tasks = [plc_node_simulator(node) for node in nodes]
+    # EJECUTAR PRIMERO LA CREACIÓN DE TABLA
+    asegurar_tabla()
+
+    # LUEGO CARGAR EL ORQUESTADOR
+    orchestrator = SystemOrchestrator(config_path=CONFIG_PATH)
+    if not orchestrator.load_configuration():
+        print("❌ Falló la carga de configuración. Abortando.")
+        return
+
+    tasks = []
+    for node in orchestrator.active_nodes:
+        tasks.append(simulate_device(node))
+    
+    if not tasks:
+        print("⚠️ Sistema en Standby: No hay nodos activos en el JSON.")
+        return
+
+    print(f"\n🚀 SIMULACIÓN INICIADA: Corriendo {len(tasks)} hilos industriales...")
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
-    init_db()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n[!] Simulation stopped.")
+        print("\n🛑 Simulación detenida.")
